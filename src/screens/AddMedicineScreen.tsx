@@ -49,6 +49,8 @@ export default function AddMedicineScreen({ navigation, route }: Props) {
   // Time picker state
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // For one-time: pick date first, then time
+  const [showOneTimeTimePicker, setShowOneTimeTimePicker] = useState(false);
   const [editingTimeIndex, setEditingTimeIndex] = useState<number | null>(null);
   const [pickerDate, setPickerDate] = useState(new Date());
 
@@ -164,24 +166,53 @@ export default function AddMedicineScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* One-time: Date & Time */}
+        {/* One-time: Date & Time — two-step on Android */}
         {reminderType === 'one-time' && (
           <>
             <Text style={styles.sectionLabel}>Schedule Date & Time</Text>
             <View style={styles.card}>
               <TouchableOpacity style={styles.timeRow} onPress={() => setShowDatePicker(true)}>
-                <Text style={styles.timeLabel}>Date & Time</Text>
+                <Text style={styles.timeLabel}>📅 Date</Text>
                 <Text style={styles.timeValue}>
-                  {scheduledDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                  {scheduledDate.toLocaleDateString([], { dateStyle: 'medium' })}
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.divider} />
+              <TouchableOpacity style={styles.timeRow} onPress={() => setShowOneTimeTimePicker(true)}>
+                <Text style={styles.timeLabel}>⏰ Time</Text>
+                <Text style={styles.timeValue}>
+                  {scheduledDate.toLocaleTimeString([], { timeStyle: 'short' })}
                 </Text>
               </TouchableOpacity>
             </View>
             {showDatePicker && (
               <DateTimePicker
                 value={scheduledDate}
-                mode="datetime"
+                mode="date"
                 minimumDate={new Date()}
-                onChange={(_, d) => { setShowDatePicker(false); if (d) setScheduledDate(d); }}
+                onChange={(_, d) => {
+                  setShowDatePicker(false);
+                  if (d) {
+                    const updated = new Date(scheduledDate);
+                    updated.setFullYear(d.getFullYear(), d.getMonth(), d.getDate());
+                    setScheduledDate(updated);
+                  }
+                }}
+              />
+            )}
+            {showOneTimeTimePicker && (
+              <DateTimePicker
+                value={scheduledDate}
+                mode="time"
+                is24Hour={false}
+                onChange={(_, d) => {
+                  setShowOneTimeTimePicker(false);
+                  if (d) {
+                    const updated = new Date(scheduledDate);
+                    updated.setHours(d.getHours(), d.getMinutes(), 0, 0);
+                    setScheduledDate(updated);
+                  }
+                }}
               />
             )}
           </>
