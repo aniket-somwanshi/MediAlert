@@ -3,6 +3,8 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { Medicine } from '../types';
 
+const CHANNEL_ID = 'medialert';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -15,6 +17,18 @@ Notifications.setNotificationHandler({
 export async function requestPermissions(): Promise<boolean> {
   if (!Device.isDevice) return false;
 
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+      name: 'MediAlert Reminders',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+  }
+
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
 
@@ -23,18 +37,19 @@ export async function requestPermissions(): Promise<boolean> {
     finalStatus = status;
   }
 
-  if (finalStatus !== 'granted') return false;
+  return finalStatus === 'granted';
+}
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('medialert', {
-      name: 'MediAlert Reminders',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      sound: 'default',
-    });
-  }
-
-  return true;
+function buildContent(medicine: Medicine) {
+  const body = `${medicine.dosage}${medicine.instructions ? ' — ' + medicine.instructions : ''}`;
+  return {
+    title: `💊 Time for ${medicine.name}`,
+    body,
+    sound: 'default' as const,
+    data: { medicineId: medicine.id },
+    // channelId is required on Android for notifications to appear
+    ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
+  };
 }
 
 export async function cancelNotifications(ids: string[]): Promise<void> {
@@ -43,18 +58,13 @@ export async function cancelNotifications(ids: string[]): Promise<void> {
 
 export async function scheduleNotifications(medicine: Medicine): Promise<string[]> {
   const ids: string[] = [];
-  const body = `${medicine.dosage}${medicine.instructions ? ' — ' + medicine.instructions : ''}`;
+  const content = buildContent(medicine);
 
   if (medicine.reminderType === 'one-time' && medicine.scheduledDate) {
     const date = new Date(medicine.scheduledDate);
     if (date > new Date()) {
       const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `💊 Time for ${medicine.name}`,
-          body,
-          sound: 'default',
-          data: { medicineId: medicine.id },
-        },
+        content,
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
       });
       ids.push(id);
@@ -68,12 +78,7 @@ export async function scheduleNotifications(medicine: Medicine): Promise<string[
 
     if (medicine.frequency === 'daily') {
       const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `💊 Time for ${medicine.name}`,
-          body,
-          sound: 'default',
-          data: { medicineId: medicine.id },
-        },
+        content,
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
           hour,
@@ -87,12 +92,7 @@ export async function scheduleNotifications(medicine: Medicine): Promise<string[
     ) {
       for (const weekday of medicine.daysOfWeek) {
         const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `💊 Time for ${medicine.name}`,
-            body,
-            sound: 'default',
-            data: { medicineId: medicine.id },
-          },
+          content,
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
             weekday: weekday + 1, // expo uses 1=Sun … 7=Sat
